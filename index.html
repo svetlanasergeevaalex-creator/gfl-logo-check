@@ -108,8 +108,27 @@
   }
   .circle-toggle .d{width:7px;height:7px;border-radius:50%;border:1.5px solid #fff;display:inline-block}
   .circle-toggle.on .d{background:#fff}
-  .stages{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .stages{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
   @media(max-width:520px){.stages{grid-template-columns:1fr}}
+  .corrected-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .card-preview .cap{
+    font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:6px;
+  }
+  .card{
+    display:flex;align-items:center;gap:11px;background:#fff;
+    border:1px solid var(--line);border-radius:12px;padding:9px 12px;
+  }
+  #cardLogo{width:40px;height:40px;border-radius:50%;flex:0 0 auto;display:block}
+  .card-text{min-width:0}
+  .card-text .hname{font-size:14px;font-weight:650;color:var(--ink);line-height:1.2;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-text .ow{
+    display:inline-flex;align-items:center;gap:4px;margin-top:4px;
+    font-size:11px;color:#4a5563;background:var(--review-bg);
+    padding:2px 8px;border-radius:999px;
+  }
+  .card-text .ow svg{width:11px;height:11px;stroke:#4a5563;fill:none;stroke-width:1.8}
   .fit-bar{display:flex;flex-direction:column;gap:11px;margin-top:13px}
 
   .drop{
@@ -255,7 +274,19 @@
       <div id="stageWrap" class="hidden">
         <div class="stages">
           <div class="stage"><span class="frame-tag">Uploaded</span><canvas id="srcCanvas"></canvas></div>
-          <div class="stage show-circle" id="correctedStage"><span class="frame-tag">Corrected</span><canvas id="outCanvas"></canvas><div class="circle-overlay"><svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><defs><mask id="circMask"><rect width="100" height="100" fill="#fff"/><circle cx="50" cy="50" r="50" fill="#000"/></mask></defs><rect width="100" height="100" fill="rgba(21,32,46,.42)" mask="url(#circMask)"/><circle cx="50" cy="50" r="49.6" fill="none" stroke="#fff" stroke-width="0.7" stroke-dasharray="2.4 2"/></svg></div><button class="circle-toggle on" id="circleToggle" aria-pressed="true"><span class="d"></span>Circle preview</button></div>
+          <div class="corrected-col">
+            <div class="stage show-circle" id="correctedStage"><span class="frame-tag">Corrected</span><canvas id="outCanvas"></canvas><div class="circle-overlay"><svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><defs><mask id="circMask"><rect width="100" height="100" fill="#fff"/><circle cx="50" cy="50" r="50" fill="#000"/></mask></defs><rect width="100" height="100" fill="rgba(21,32,46,.42)" mask="url(#circMask)"/><circle cx="50" cy="50" r="49.6" fill="none" stroke="#fff" stroke-width="0.7" stroke-dasharray="2.4 2"/></svg></div><button class="circle-toggle on" id="circleToggle" aria-pressed="true"><span class="d"></span>Circle preview</button></div>
+            <div class="card-preview">
+              <div class="cap">In the card</div>
+              <div class="card">
+                <canvas id="cardLogo" width="80" height="80"></canvas>
+                <div class="card-text">
+                  <div class="hname">Hotel Name</div>
+                  <div class="ow"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9.5 12l2 2 3.5-4"/></svg>Official website</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="fit-bar">
@@ -330,6 +361,7 @@
   const $ = id => document.getElementById(id);
   const dropArea=$("dropArea"), fileInput=$("fileInput"), stageWrap=$("stageWrap");
   const srcCanvas=$("srcCanvas"), outCanvas=$("outCanvas"), checklist=$("checklist");
+  const cardLogo=$("cardLogo");
   const downloadBtn=$("downloadBtn"), resetBtn=$("resetBtn");
   const optSquare=$("optSquare"), optWhite=$("optWhite"), tolerance=$("tolerance"), tolVal=$("tolVal"), toleranceRow=$("toleranceRow");
   const optPad=$("optPad"), padAmount=$("padAmount"), padVal=$("padVal"), padRow=$("padRow");
@@ -550,7 +582,22 @@
     outCanvas.width=Math.round(out.width*s);outCanvas.height=Math.round(out.height*s);
     const px=outCanvas.getContext("2d");px.clearRect(0,0,outCanvas.width,outCanvas.height);
     px.imageSmoothingQuality="high";px.drawImage(out,0,0,outCanvas.width,outCanvas.height);
+    drawCard(out);
     downloadBtn.disabled=false;
+  }
+
+  // Render the circular logo as it appears in a Google hotel card (40px on white).
+  function drawCard(out){
+    const c=cardLogo, ctx=c.getContext("2d"), S=c.width;
+    ctx.clearRect(0,0,S,S);
+    ctx.save();
+    ctx.beginPath();ctx.arc(S/2,S/2,S/2,0,Math.PI*2);ctx.clip();
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,S,S); // card background shows through transparent areas
+    ctx.imageSmoothingQuality="high";
+    if(out) ctx.drawImage(out,0,0,S,S);
+    ctx.restore();
+    ctx.beginPath();ctx.arc(S/2,S/2,S/2-0.5,0,Math.PI*2);
+    ctx.strokeStyle="rgba(21,32,46,.10)";ctx.lineWidth=1;ctx.stroke();
   }
 
   segSize.addEventListener("click",e=>{
