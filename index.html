@@ -313,7 +313,6 @@
 
         <h3>Diagnostics</h3>
         <div id="checklist"></div>
-        <p class="hint">Items 5 and 6 can't be checked automatically — confirm them yourself. The tool only restates the rule and helps you compare.</p>
 
         <div class="controls">
           <div class="ctl">
@@ -482,27 +481,15 @@
     else if(a.bgType==="colored") items.push({s:"pass",t:"Background / contrast",req:"non-white ✓",m:"Coloured background — allowed."});
     else items.push({s:"warn",t:"Background / contrast",req:"prefer transparent",m:"White background. Allowed, but Google prefers transparent — you can turn on white removal."});
 
-    items.push({s:state.manualText?"pass":"review",t:"Text in the logo",req:"≤ 3 chars",
-      m:"Check manually: no more than 3 characters (H, HB, XYZ). Full hotel names get rejected.",manual:"text"});
-    items.push({s:state.manualBrand?"pass":"review",t:"Brand consistency",req:"matches site",
-      m:"Compare with the logo/favicon on the hotel's official site — Google matches them on the final URL.",manual:"brand"});
-
     checklist.innerHTML=items.map(it=>{
       const icon=it.s==="review"?ICONS.review:ICONS[it.s];
-      let extra="";
-      if(it.manual==="text") extra=`<label class="manual"><input type="checkbox" id="mText" ${state.manualText?"checked":""}>Checked — 3 characters or fewer</label>`;
-      if(it.manual==="brand") extra=`<label class="manual"><input type="checkbox" id="mBrand" ${state.manualBrand?"checked":""}>Compared with the hotel's site</label>`;
       return `<div class="check s-${it.s}">
         <div class="dot">${icon}</div>
         <div class="body">
           <div class="title"><b>${it.t}</b><span class="req">${it.req}</span></div>
-          <div class="msg">${it.m}</div>${extra}
+          <div class="msg">${it.m}</div>
         </div></div>`;
     }).join("");
-
-    const mt=$("mText"), mb=$("mBrand");
-    if(mt) mt.addEventListener("change",e=>{state.manualText=e.target.checked;renderChecklist();});
-    if(mb) mb.addEventListener("change",e=>{state.manualBrand=e.target.checked;renderChecklist();});
   }
 
   function rebuildFix(){
