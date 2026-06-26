@@ -98,8 +98,19 @@
     letter-spacing:.08em;text-transform:uppercase;background:rgba(21,32,46,.78);
     color:#fff;padding:3px 7px;border-radius:5px;
   }
+  .stage .circle-overlay{position:absolute;inset:0;pointer-events:none;display:none}
+  .stage.show-circle .circle-overlay{display:block}
+  .circle-toggle{
+    position:absolute;bottom:9px;right:9px;display:flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    background:rgba(21,32,46,.78);color:#fff;border:0;padding:4px 8px;border-radius:6px;
+    cursor:pointer;pointer-events:auto;
+  }
+  .circle-toggle .d{width:7px;height:7px;border-radius:50%;border:1.5px solid #fff;display:inline-block}
+  .circle-toggle.on .d{background:#fff}
   .stages{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:520px){.stages{grid-template-columns:1fr}}
+  .fit-bar{display:flex;flex-direction:column;gap:11px;margin-top:13px}
 
   .drop{
     border:1.5px dashed var(--line-strong);border-radius:11px;
@@ -162,6 +173,12 @@
   .range-row{display:flex;align-items:center;gap:10px}
   .range-row input[type=range]{flex:1;accent-color:var(--accent)}
   .range-row .val{font-family:var(--mono);font-size:12px;color:var(--muted);width:34px;text-align:right}
+  .mini-reset{
+    border:1px solid var(--line-strong);background:var(--panel);color:var(--accent);
+    font:inherit;font-size:11.5px;padding:4px 9px;border-radius:7px;cursor:pointer;white-space:nowrap;
+  }
+  .mini-reset:hover:not(:disabled){background:#F4F6FE}
+  .mini-reset:disabled{color:var(--line-strong);cursor:not-allowed}
 
   .btn{
     width:100%;border:0;border-radius:10px;background:var(--accent);color:#fff;
@@ -238,7 +255,20 @@
       <div id="stageWrap" class="hidden">
         <div class="stages">
           <div class="stage"><span class="frame-tag">Uploaded</span><canvas id="srcCanvas"></canvas></div>
-          <div class="stage"><span class="frame-tag">Corrected</span><canvas id="outCanvas"></canvas></div>
+          <div class="stage show-circle" id="correctedStage"><span class="frame-tag">Corrected</span><canvas id="outCanvas"></canvas><div class="circle-overlay"><svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><defs><mask id="circMask"><rect width="100" height="100" fill="#fff"/><circle cx="50" cy="50" r="50" fill="#000"/></mask></defs><rect width="100" height="100" fill="rgba(21,32,46,.42)" mask="url(#circMask)"/><circle cx="50" cy="50" r="49.6" fill="none" stroke="#fff" stroke-width="0.7" stroke-dasharray="2.4 2"/></svg></div><button class="circle-toggle on" id="circleToggle" aria-pressed="true"><span class="d"></span>Circle preview</button></div>
+        </div>
+
+        <div class="fit-bar">
+          <div class="ctl" id="adjustCtl">
+            <div class="lab"><b>Adjust fit</b><small>drag the logo on the preview and zoom to frame the circle crop</small></div>
+            <span class="switch"><input type="checkbox" id="optAdjust"><span class="track"></span></span>
+          </div>
+          <div class="range-row" id="adjustRow" style="opacity:.45">
+            <small style="color:var(--muted);font-size:11.5px">Zoom</small>
+            <input type="range" id="zoom" min="50" max="300" value="100" disabled>
+            <span class="val" id="zoomVal">100%</span>
+            <button type="button" class="mini-reset" id="resetFit" disabled>Reset</button>
+          </div>
         </div>
 
         <div class="readout">
@@ -263,7 +293,7 @@
               <button data-size="0">as is</button>
             </div>
           </div>
-          <div class="ctl">
+          <div class="ctl" id="squareCtl">
             <div class="lab"><b>Make it square</b><small>pads with transparency, no stretching</small></div>
             <span class="switch"><input type="checkbox" id="optSquare" checked><span class="track"></span></span>
           </div>
@@ -276,7 +306,7 @@
             <input type="range" id="tolerance" min="2" max="60" value="18" disabled>
             <span class="val" id="tolVal">18</span>
           </div>
-          <div class="ctl">
+          <div class="ctl" id="padCtl">
             <div class="lab"><b>Add padding</b><small>extra breathing room around the logo — useful when it touches the edges</small></div>
             <span class="switch"><input type="checkbox" id="optPad"><span class="track"></span></span>
           </div>
@@ -303,9 +333,12 @@
   const downloadBtn=$("downloadBtn"), resetBtn=$("resetBtn");
   const optSquare=$("optSquare"), optWhite=$("optWhite"), tolerance=$("tolerance"), tolVal=$("tolVal"), toleranceRow=$("toleranceRow");
   const optPad=$("optPad"), padAmount=$("padAmount"), padVal=$("padVal"), padRow=$("padRow");
+  const correctedStage=$("correctedStage"), circleToggle=$("circleToggle");
+  const squareCtl=$("squareCtl"), padCtl=$("padCtl");
+  const optAdjust=$("optAdjust"), zoom=$("zoom"), zoomVal=$("zoomVal"), adjustRow=$("adjustRow"), resetFit=$("resetFit");
   const segSize=$("segSize");
 
-  const state={img:null,file:null,isPng:false,analysis:null,targetSize:512,manualText:false,manualBrand:false,outCanvas:null};
+  const state={img:null,file:null,isPng:false,analysis:null,targetSize:512,manualText:false,manualBrand:false,outCanvas:null,zoom:1,panX:0,panY:0};
 
   const fmtBytes=b=>b<1024?b+" B":b<1048576?(b/1024).toFixed(1)+" KB":(b/1048576).toFixed(2)+" MB";
   const ICONS={
@@ -334,7 +367,7 @@
     state.isPng=(file.type==="image/png") && await detectPng(file);
     const url=URL.createObjectURL(file);
     const img=new Image();
-    img.onload=()=>{URL.revokeObjectURL(url);state.img=img;dropArea.classList.add("hidden");stageWrap.classList.remove("hidden");analyze();};
+    img.onload=()=>{URL.revokeObjectURL(url);state.img=img;state.zoom=1;state.panX=0;state.panY=0;zoom.value=100;zoomVal.textContent="100%";dropArea.classList.add("hidden");stageWrap.classList.remove("hidden");analyze();};
     img.onerror=()=>{URL.revokeObjectURL(url);alert("Couldn't read the file. The format may not be supported by the browser (e.g. SVG).");};
     img.src=url;
   }
@@ -407,8 +440,10 @@
 
     items.push(a.w===a.h
       ? {s:"pass",t:"Proportions",req:"1:1",m:"Square."}
-      : {s:optSquare.checked?"warn":"fail",t:"Proportions",req:"1:1",
-         m:optSquare.checked?"Not square — it will be padded with transparency to 1:1.":"Not square. Turn on \"Make it square\"."});
+      : optAdjust.checked
+        ? {s:"pass",t:"Proportions",req:"1:1",m:"Not square — you're framing it into a 1:1 crop by hand."}
+        : {s:optSquare.checked?"warn":"fail",t:"Proportions",req:"1:1",
+           m:optSquare.checked?"Not square — it will be padded with transparency to 1:1.":"Not square. Turn on \"Make it square\"."});
 
     if(a.visibleFrac<0.004) items.push({s:"fail",t:"Background / contrast",req:"visible on white",m:"The logo is barely visible on white. A darker or coloured version is needed."});
     else if(a.bgType==="transparent") items.push({s:"pass",t:"Background / contrast",req:"transparent ✓",m:"Transparent background — the preferred option."});
@@ -459,6 +494,19 @@
     }
 
     const target=state.targetSize;
+    let out=document.createElement("canvas");
+
+    if(optAdjust.checked){
+      // Manual fit: user controls zoom and position inside a square crop.
+      const finalSide=target>0?target:Math.min(1200,Math.max(72,Math.max(a.w,a.h)));
+      out.width=finalSide;out.height=finalSide;
+      const ox=out.getContext("2d");ox.imageSmoothingQuality="high";
+      const baseScale=finalSide/Math.max(a.w,a.h);
+      const drawW=a.w*baseScale*state.zoom, drawH=a.h*baseScale*state.zoom;
+      const cx=finalSide/2 + state.panX*finalSide;
+      const cy=finalSide/2 + state.panY*finalSide;
+      ox.drawImage(work,0,0,a.w,a.h, cx-drawW/2, cy-drawH/2, drawW, drawH);
+    }else{
     const padFrac = optPad.checked ? Math.min(0.45, Math.max(0, parseInt(padAmount.value,10)/100)) : 0;
     // Padding implies a square frame (the margin is added around the logo within a 1:1 canvas).
     const wantSquare = optSquare.checked || padFrac>0;
@@ -477,7 +525,6 @@
       }catch(e){}
     }
 
-    let out=document.createElement("canvas");
     if(wantSquare){
       // Square canvas; the logo is fit into an inner box leaving the chosen margin.
       const baseSide=Math.max(sw,sh);
@@ -495,6 +542,7 @@
       out.width=fw;out.height=fh;
       const ox=out.getContext("2d");ox.imageSmoothingQuality="high";
       ox.drawImage(work,0,0,fw,fh);
+    }
     }
 
     state.outCanvas=out;
@@ -523,6 +571,72 @@
     rebuildFix();
   });
   padAmount.addEventListener("input",()=>{padVal.textContent=padAmount.value+"%";rebuildFix();});
+  circleToggle.addEventListener("click",()=>{
+    const on=correctedStage.classList.toggle("show-circle");
+    circleToggle.classList.toggle("on",on);
+    circleToggle.setAttribute("aria-pressed",on?"true":"false");
+  });
+
+  optAdjust.addEventListener("change",()=>{
+    const on=optAdjust.checked;
+    zoom.disabled=!on; resetFit.disabled=!on;
+    adjustRow.style.opacity=on?"1":".45";
+    // In manual mode the square + padding controls are replaced by zoom/drag.
+    squareCtl.style.display=on?"none":"";
+    padCtl.style.display=on?"none":"";
+    padRow.style.display=on?"none":"";
+    correctedStage.style.cursor=on?"grab":"";
+    if(on){
+      correctedStage.classList.add("show-circle");
+      circleToggle.classList.add("on");
+      circleToggle.setAttribute("aria-pressed","true");
+    }
+    renderChecklist();
+    rebuildFix();
+  });
+  zoom.addEventListener("input",()=>{
+    state.zoom=parseInt(zoom.value,10)/100;
+    zoomVal.textContent=zoom.value+"%";
+    rebuildFix();
+  });
+  resetFit.addEventListener("click",()=>{
+    state.zoom=1; state.panX=0; state.panY=0;
+    zoom.value=100; zoomVal.textContent="100%";
+    rebuildFix();
+  });
+
+  // Drag to reposition the logo within the crop (manual mode only).
+  let dragging=false, startX=0, startY=0, startPanX=0, startPanY=0;
+  correctedStage.addEventListener("pointerdown",e=>{
+    if(!optAdjust.checked || e.target.closest(".circle-toggle")) return;
+    dragging=true;
+    try{correctedStage.setPointerCapture(e.pointerId);}catch(_){}
+    startX=e.clientX; startY=e.clientY; startPanX=state.panX; startPanY=state.panY;
+    correctedStage.style.cursor="grabbing";
+  });
+  correctedStage.addEventListener("pointermove",e=>{
+    if(!dragging) return;
+    const rect=correctedStage.getBoundingClientRect();
+    state.panX=startPanX+(e.clientX-startX)/rect.width;
+    state.panY=startPanY+(e.clientY-startY)/rect.height;
+    rebuildFix();
+  });
+  const endDrag=e=>{
+    if(!dragging) return;
+    dragging=false;
+    try{correctedStage.releasePointerCapture(e.pointerId);}catch(_){}
+    correctedStage.style.cursor=optAdjust.checked?"grab":"";
+  };
+  correctedStage.addEventListener("pointerup",endDrag);
+  correctedStage.addEventListener("pointercancel",endDrag);
+  // Wheel to zoom (manual mode only).
+  correctedStage.addEventListener("wheel",e=>{
+    if(!optAdjust.checked) return;
+    e.preventDefault();
+    let v=parseInt(zoom.value,10) - Math.sign(e.deltaY)*5;
+    v=Math.max(50,Math.min(300,v));
+    zoom.value=v; zoomVal.textContent=v+"%"; state.zoom=v/100; rebuildFix();
+  },{passive:false});
 
   downloadBtn.addEventListener("click",()=>{
     if(!state.outCanvas)return;
